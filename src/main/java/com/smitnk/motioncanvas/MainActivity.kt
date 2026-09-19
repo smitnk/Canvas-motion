@@ -3,6 +3,7 @@ package com.smitnk.motioncanvas
 import android.os.Bundle
 import android.net.Uri
 import android.media.MediaPlayer
+import android.graphics.Color as AndroidColor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -159,6 +162,7 @@ fun MotionCanvasApp() {
     var selectedTool by remember { mutableStateOf(ToolType.Brush) }
     var brushColor by remember { mutableStateOf(Color.Black) }
     var brushSize by remember { mutableFloatStateOf(8f) }
+    var showColorPicker by remember { mutableStateOf(false) }
     var onionSkin by remember { mutableStateOf(true) }
     var showGrid by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -930,16 +934,14 @@ fun EditorScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Active color indicator
+                // Active color indicator — opens the full color editor
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(color)
-                        .border(1.dp, White, CircleShape)
-                        .clickable {
-                            onColorChange(if (color == Color.Black) Color.Red else Color.Black)
-                        }
+                        .border(2.dp, White, CircleShape)
+                        .clickable { showColorPicker = true }
                 )
             }
 
@@ -1128,7 +1130,198 @@ fun EditorScreen(
             Icon(Icons.Default.FullscreenExit, contentDescription = "Show Editor UI", tint = White)
         }
     }
+
+    if (showColorPicker) {
+        ColorPickerDialog(
+            color = color,
+            onColorChange = onColorChange,
+            onDismiss = { showColorPicker = false }
+        )
     }
+    }
+}
+
+@Composable
+fun ColorPickerDialog(
+    color: Color,
+    onColorChange: (Color) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var hsv by remember(color) {
+        mutableStateOf(
+            FloatArray(3).also { AndroidColor.colorToHSV(color.copy(alpha = 1f).toArgb(), it) }
+        )
+    }
+    var alpha by remember(color) { mutableFloatStateOf(color.alpha) }
+    var hex by remember(color) { mutableStateOf(color.toHexString()) }
+    var hexError by remember { mutableStateOf(false) }
+
+    fun emitColor() {
+        val rgb = AndroidColor.HSVToColor(hsv)
+        val argb = AndroidColor.argb(
+            (alpha * 255f).roundToInt().coerceIn(0, 255),
+            AndroidColor.red(rgb),
+            AndroidColor.green(rgb),
+            AndroidColor.blue(rgb)
+        )
+        val next = Color(argb)
+        onColorChange(next)
+        hex = next.toHexString()
+        hexError = false
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = PanelBackground,
+        title = { Text("Color", color = White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(210.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black)
+                        .pointerInput(hsv[0]) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    val s = (offset.x / size.width).coerceIn(0f, 1f)
+                                    val v = (1f - offset.y / size.height).coerceIn(0f, 1f)
+                                    hsv = hsv.copyOf().also { it[1] = s; it[2] = v }
+                                    emitColor()
+                                },
+                                onDrag = { change, _ ->
+                                    val s = (change.position.x / size.width).coerceIn(0f, 1f)
+                                    val v = (1f - change.position.y / size.height).coerceIn(0f, 1f)
+                                    hsv = hsv.copyOf().also { it[1] = s; it[2] = v }
+                                    emitColor()
+                                    change.consume()
+                                }
+                            )
+                        }
+                ) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawRect(brush = Brush.horizontalGradient(listOf(Color.White, Color.hsv(hsv[0], 1f, 1f))))
+                        drawRect(brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                        val x = hsv[1] * size.width
+                        val y = (1f - hsv[2]) * size.height
+                        drawCircle(
+                            color = Color.White,
+                            radius = 9.dp.toPx(),
+                            center = Offset(x, y),
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(17.dp))
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    hsv = hsv.copyOf().also { it[0] = (offset.x / size.width * 360f).coerceIn(0f, 360f) }
+                                    emitColor()
+                                },
+                                onDrag = { change, _ ->
+                                    hsv = hsv.copyOf().also { it[0] = (change.position.x / size.width * 360f).coerceIn(0f, 360f) }
+                                    emitColor()
+                                    change.consume()
+                                }
+                            )
+                        }
+                ) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
+                            )
+                        )
+                        val x = hsv[0] / 360f * size.width
+                        drawLine(
+                            color = Color.White,
+                            start = Offset(x, 0f),
+                            end = Offset(x, size.height),
+                            strokeWidth = 3.dp.toPx()
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .border(1.dp, White, CircleShape)
+                    )
+                    OutlinedTextField(
+                        value = hex,
+                        onValueChange = {
+                            hex = it
+                            val parsed = parseHexColor(it)
+                            if (parsed != null) {
+                                onColorChange(parsed.copy(alpha = alpha))
+                                hsv = FloatArray(3).also { values -> AndroidColor.colorToHSV(parsed.toArgb(), values) }
+                                hexError = false
+                            } else {
+                                hexError = it.isNotEmpty()
+                            }
+                        },
+                        label = { Text("HEX") },
+                        singleLine = true,
+                        isError = hexError,
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedBorderColor = PinkAccent,
+                            unfocusedBorderColor = TextSecondary,
+                            focusedLabelColor = PinkAccent,
+                            unfocusedLabelColor = TextSecondary
+                        )
+                    )
+                }
+
+                Text("Opacity  \${(alpha * 100).roundToInt()}%", color = White, fontSize = 13.sp)
+                Slider(
+                    value = alpha,
+                    onValueChange = {
+                        alpha = it
+                        emitColor()
+                    },
+                    valueRange = 0f..1f
+                )
+                Text(
+                    "HSV  \${hsv[0].roundToInt()}°  \${(hsv[1] * 100).roundToInt()}%  \${(hsv[2] * 100).roundToInt()}%",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done", color = PinkAccent) }
+        }
+    )
+}
+
+private fun Color.toHexString(): String {
+    val r = (red * 255f).roundToInt().coerceIn(0, 255)
+    val g = (green * 255f).roundToInt().coerceIn(0, 255)
+    val b = (blue * 255f).roundToInt().coerceIn(0, 255)
+    return "#%02X%02X%02X".format(r, g, b)
+}
+
+private fun parseHexColor(value: String): Color? {
+    val clean = value.trim().removePrefix("#")
+    if (clean.length != 6) return null
+    return try { Color(AndroidColor.parseColor("#$clean")) } catch (_: IllegalArgumentException) { null }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
