@@ -763,8 +763,8 @@ fun EditorScreen(
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = AppBackground,
-        topBar = if (!uiHidden) {
-            {
+        topBar = {
+            if (!uiHidden) {
                 TopAppBar(
                     title = { Text(project.name, color = White, fontSize = 16.sp) },
                     navigationIcon = {
@@ -795,8 +795,8 @@ fun EditorScreen(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
                 )
             }
-        } else null,
-        bottomBar = if (!uiHidden) ({
+        },
+        bottomBar = {
             // Filmstrip & Playback control
             Surface(
                 color = PanelBackground,
@@ -864,7 +864,7 @@ fun EditorScreen(
                     }
                 }
             }
-        }) else ({ })
+        }
     ) { padding ->
         Row(
             modifier = Modifier
@@ -974,19 +974,19 @@ fun EditorScreen(
                     // Grid
                     if (grid) {
                         val step = 40.dp.toPx()
-                        for (x in 0 until (size.width / step).toInt()) {
+                        for (x in 0 until (this.size.width / step).toInt()) {
                             drawLine(
                                 color = Color.LightGray.copy(alpha = 0.4f),
                                 start = Offset(x * step, 0f),
-                                end = Offset(x * step, size.height),
+                                end = Offset(x * step, this.size.height),
                                 strokeWidth = 1f
                             )
                         }
-                        for (y in 0 until (size.height / step).toInt()) {
+                        for (y in 0 until (this.size.height / step).toInt()) {
                             drawLine(
                                 color = Color.LightGray.copy(alpha = 0.4f),
                                 start = Offset(0f, y * step),
-                                end = Offset(size.width, y * step),
+                                end = Offset(this.size.width, y * step),
                                 strokeWidth = 1f
                             )
                         }
