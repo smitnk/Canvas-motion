@@ -971,10 +971,26 @@ fun EditorScreen(
                                         currentDrawingPoints.clear()
                                     }
 
-                                    val zoomChange = event.calculateZoom()
+                                    val zoomChange = event.calculateZoom().takeIf { it.isFinite() && it > 0f } ?: 1f
                                     val panChange = event.calculatePan()
-                                    canvasScale = (canvasScale * zoomChange).coerceIn(0.25f, 8f)
-                                    canvasOffset += panChange
+                                    val oldScale = canvasScale
+                                    val newScale = (oldScale * zoomChange).coerceIn(0.25f, 8f)
+                                    val effectiveZoom = newScale / oldScale
+                                    val activeChanges = event.changes.filter { it.pressed }
+                                    val centroid = if (activeChanges.isNotEmpty()) {
+                                        Offset(
+                                            activeChanges.map { it.position.x }.average().toFloat(),
+                                            activeChanges.map { it.position.y }.average().toFloat()
+                                        )
+                                    } else Offset.Zero
+
+                                    // Keep the pinch focal point under the fingers while zooming.
+                                    canvasScale = newScale
+                                    canvasOffset =
+                                        canvasOffset +
+                                            panChange +
+                                            (centroid - canvasOffset) * (1f - effectiveZoom)
+
                                     event.changes.forEach { it.consume() }
                                 } else if (pressed == 1 && !multiTouch && drawing) {
                                     val change = event.changes.firstOrNull { it.pressed }
@@ -1103,7 +1119,13 @@ fun EditorScreen(
                 }) {
                     Icon(Icons.Default.Remove, contentDescription = "Zoom out", tint = White)
                 }
-                Text("${(canvasScale * 100).toInt()}%", color = White, fontSize = 12.sp)
+                Text(
+                    "${(canvasScale * 100).toInt()}%",
+                    color = White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.widthIn(min = 42.dp),
+                    textAlign = TextAlign.Center
+                )
                 IconButton(onClick = {
                     canvasScale = (canvasScale * 1.25f).coerceAtMost(8f)
                 }) {
