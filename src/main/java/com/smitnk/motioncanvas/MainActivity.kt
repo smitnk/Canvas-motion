@@ -13,6 +13,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.awaitEachGesture
+import androidx.compose.ui.input.pointer.awaitFirstDown
+import androidx.compose.ui.input.pointer.calculatePan
+import androidx.compose.ui.input.pointer.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -727,6 +731,8 @@ fun EditorScreen(
     val currentFrame = project.frames.getOrNull(frameIndex) ?: project.frames.first()
     val previousFrame = if (onionSkin && frameIndex > 0) project.frames.getOrNull(frameIndex - 1) else null
     var currentDrawingPoints = remember { mutableStateListOf<DrawPoint>() }
+    var canvasScale by remember { mutableFloatStateOf(1f) }
+    var canvasOffset by remember { mutableStateOf(Offset.Zero) }
     val context = LocalContext.current
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -945,32 +951,64 @@ fun EditorScreen(
                     .clip(RoundedCornerShape(8.dp))
                     .background(project.backgroundColor)
                     .pointerInput(tool, color, size, frameIndex) {
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                currentDrawingPoints.clear()
-                                currentDrawingPoints.add(DrawPoint(offset.x, offset.y))
-                            },
-                            onDrag = { change, _ ->
-                                change.consume()
-                                currentDrawingPoints.add(DrawPoint(change.position.x, change.position.y))
-                            },
-                            onDragEnd = {
-                                if (currentDrawingPoints.isNotEmpty()) {
-                                    currentFrame.strokes.add(
-                                        DrawStroke(
-                                            points = currentDrawingPoints.toList(),
-                                            color = if (tool == ToolType.Eraser) project.backgroundColor else color,
-                                            strokeWidth = size,
-                                            isEraser = tool == ToolType.Eraser
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            var multiTouch = false
+                            var drawing = true
+                            currentDrawingPoints.clear()
+
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.count { it.pressed }
+
+                                if (pressed >= 2) {
+                                    if (!multiTouch) {
+                                        multiTouch = true
+                                        drawing = false
+                                        currentDrawingPoints.clear()
+                                    }
+
+                                    val zoomChange = event.calculateZoom()
+                                    val panChange = event.calculatePan()
+                                    canvasScale = (canvasScale * zoomChange).coerceIn(0.25f, 8f)
+                                    canvasOffset += panChange
+                                    event.changes.forEach { it.consume() }
+                                } else if (pressed == 1 && !multiTouch && drawing) {
+                                    val change = event.changes.firstOrNull { it.pressed }
+                                    if (change != null) {
+                                        change.consume()
+                                        val worldX = (change.position.x - canvasOffset.x) / canvasScale
+                                        val worldY = (change.position.y - canvasOffset.y) / canvasScale
+                                        currentDrawingPoints.add(DrawPoint(worldX, worldY))
+                                    }
+                                } else if (pressed == 0) {
+                                    if (drawing && currentDrawingPoints.isNotEmpty()) {
+                                        currentFrame.strokes.add(
+                                            DrawStroke(
+                                                points = currentDrawingPoints.toList(),
+                                                color = if (tool == ToolType.Eraser) project.backgroundColor else color,
+                                                strokeWidth = size / canvasScale,
+                                                isEraser = tool == ToolType.Eraser
+                                            )
                                         )
-                                    )
+                                    }
                                     currentDrawingPoints.clear()
+                                    break
                                 }
                             }
-                        )
+                        }
                     }
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = canvasScale,
+                            scaleY = canvasScale,
+                            translationX = canvasOffset.x,
+                            translationY = canvasOffset.y
+                        )
+                ) {
                     // Grid
                     if (grid) {
                         val step = 40.dp.toPx()
@@ -1040,6 +1078,39 @@ fun EditorScreen(
                             style = Stroke(width = size, cap = StrokeCap.Round, join = StrokeJoin.Round)
                         )
                     }
+                }
+            }
+        }
+    }
+
+    if (!uiHidden) {
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp),
+            color = PanelBackground.copy(alpha = 0.9f),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    canvasScale = (canvasScale / 1.25f).coerceAtLeast(0.25f)
+                }) {
+                    Icon(Icons.Default.Remove, contentDescription = "Zoom out", tint = White)
+                }
+                Text("${(canvasScale * 100).toInt()}%", color = White, fontSize = 12.sp)
+                IconButton(onClick = {
+                    canvasScale = (canvasScale * 1.25f).coerceAtMost(8f)
+                }) {
+                    Icon(Icons.Default.Add, contentDescription = "Zoom in", tint = White)
+                }
+                IconButton(onClick = {
+                    canvasScale = 1f
+                    canvasOffset = Offset.Zero
+                }) {
+                    Icon(Icons.Default.CenterFocusStrong, contentDescription = "Reset view", tint = White)
                 }
             }
         }
