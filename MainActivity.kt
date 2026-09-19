@@ -327,7 +327,7 @@ fun HomeScreen(
 
     Scaffold(
         containerColor = AppBackground,
-        topBar = if (!uiHidden) ({
+        topBar = {
             TopAppBar(
                 title = { Text("MotionCanvas", color = White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
@@ -763,37 +763,39 @@ fun EditorScreen(
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = AppBackground,
-        topBar = {
-            TopAppBar(
-                title = { Text(project.name, color = White, fontSize = 16.sp) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = White)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        if (audioUri == null) audioPicker.launch(arrayOf("audio/*")) else onClearAudio()
-                    }) {
-                        Icon(
-                            if (audioUri == null) Icons.Default.MusicNote else Icons.Default.MusicOff,
-                            contentDescription = if (audioUri == null) "Add Audio" else "Remove Audio",
-                            tint = if (audioUri == null) White else PinkAccent
-                        )
-                    }
-                    IconButton(onClick = onOpenLayers) {
-                        Icon(Icons.Default.Layers, contentDescription = "Layers", tint = White)
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = White)
-                    }
-                    IconButton(onClick = onToggleUiHidden) {
-                        Icon(Icons.Default.Fullscreen, contentDescription = "Hide Editor UI", tint = White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
-            )
-        }) else ({ }),
+        topBar = if (!uiHidden) {
+            {
+                TopAppBar(
+                    title = { Text(project.name, color = White, fontSize = 16.sp) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = White)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            if (audioUri == null) audioPicker.launch(arrayOf("audio/*")) else onClearAudio()
+                        }) {
+                            Icon(
+                                if (audioUri == null) Icons.Default.MusicNote else Icons.Default.MusicOff,
+                                contentDescription = if (audioUri == null) "Add Audio" else "Remove Audio",
+                                tint = if (audioUri == null) White else PinkAccent
+                            )
+                        }
+                        IconButton(onClick = onOpenLayers) {
+                            Icon(Icons.Default.Layers, contentDescription = "Layers", tint = White)
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = White)
+                        }
+                        IconButton(onClick = onToggleUiHidden) {
+                            Icon(Icons.Default.Fullscreen, contentDescription = "Hide Editor UI", tint = White)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
+                )
+            }
+        } else null,
         bottomBar = if (!uiHidden) ({
             // Filmstrip & Playback control
             Surface(
